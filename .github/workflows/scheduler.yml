@@ -127,6 +127,7 @@ jobs:
             echo "error=Action execution failed" >> $GITHUB_OUTPUT
           else
             echo "error=" >> $GITHUB_OUTPUT
+          fi
 
 
   success_email:
