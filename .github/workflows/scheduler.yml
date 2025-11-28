@@ -34,7 +34,6 @@ jobs:
           echo "manual env='${{ github.event.inputs.environment }}'"
           echo "manual action='${{ github.event.inputs.action }}'"
           echo "schedule='${{ github.event.schedule }}'"
-
       ###################################################################
       # INLINE CONFIG – NO EXTERNAL FILES
       ###################################################################
@@ -45,17 +44,14 @@ jobs:
           rules:
             - { environment: dev,     cron: "25 1 * * *",  action: start }
             - { environment: dev,     cron: "35 1 * * *", action: stop }
-
           apps:
             dev:
               app: "dxc-content-agent-dev"
               rg:  "CXO-F1"
             
           EOF
-
           echo "Using inline config:"
           cat config.yml
-
       ###################################################################
       # RULE DECISION
       ###################################################################
@@ -68,23 +64,17 @@ jobs:
             echo "action=${{ github.event.inputs.action }}" >> $GITHUB_OUTPUT
             exit 0
           fi
-
           CURRENT_CRON='${{ github.event.schedule }}'
           NORMAL=$(echo "$CURRENT_CRON" | sed 's/"//g' | xargs)
-
           MATCH=$(yq ".rules[] | select(.cron == \"$NORMAL\")" config.yml || true)
-
           ENV=$(echo "$MATCH" | yq '.environment' || true)
           ACT=$(echo "$MATCH" | yq '.action' || true)
-
           if [[ -z "$ENV" || "$ENV" == "null" ]]; then
             echo "::error::No cron rule matched for '$NORMAL'"
             exit 1
           fi
-
           echo "environment=$ENV" >> $GITHUB_OUTPUT
           echo "action=$ACT" >> $GITHUB_OUTPUT
-
       ###################################################################
       # MAP ENV → APP / RG (INLINE)
       ###################################################################
@@ -92,13 +82,10 @@ jobs:
         id: map
         run: |
           ENV="${{ steps.decide.outputs.environment }}"
-
           APP=$(yq ".apps.${ENV}.app" config.yml)
           RG=$(yq ".apps.${ENV}.rg" config.yml)
-
           echo "app=$APP" >> $GITHUB_OUTPUT
           echo "rg=$RG" >> $GITHUB_OUTPUT
-
       ###################################################################
       # AZURE LOGIN + START/STOP
       ###################################################################
@@ -114,9 +101,7 @@ jobs:
           APP="${{ steps.map.outputs.app }}"
           RG="${{ steps.map.outputs.rg }}"
           SUB="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
-
           echo "Executing action='$ACTION' for app='$APP'"
-
           if [[ "$ACTION" == "start" ]]; then
             az rest --method post \
               --url "https://management.azure.com/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.App/containerApps/$APP/start?api-version=2023-05-01"
@@ -125,4 +110,54 @@ jobs:
               --url "https://management.azure.com/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.App/containerApps/$APP/stop?api-version=2023-05-01"
           fi
 
-    
+
+      ###################################################################
+      # CAPTURE ERRORS
+      ###################################################################
+      - name: Capture Error
+        id: capture_error
+        if: always()
+        run: |
+          if [[ "${{ steps.exec.outcome }}" == "failure" ]]; then
+            echo "error=Action execution failed" >> $GITHUB_OUTPUT
+          else
+            echo "error=" >> $GITHUB_OUTPUT
+
+  #######################################################################
+  # SUCCESS EMAIL
+  #######################################################################
+  success_email:
+    needs: scheduler
+    if: success()
+    uses: ./.github/workflows/send-mail.yml
+    secrets: inherit
+    with:
+      subject: "Scheduler SUCCESS - ${{ needs.scheduler.outputs.environment }} (${{ needs.scheduler.outputs.action }})"
+      message: |
+        <b>Environment:</b> ${{ needs.scheduler.outputs.environment }}
+
+        <b>Action:</b> ${{ needs.scheduler.outputs.action }}
+
+        <b>Time:</b> ${{ github.event.schedule || 'Manual Dispatch' }}
+
+      status: success
+      from: "manikandan.ramamoorthy@cxontology.com"
+      to: "manishram2019@gmail.com"
+
+  #######################################################################
+  # FAILURE EMAIL
+  #######################################################################
+  failure_email:
+    needs: scheduler
+    if: failure()
+    uses: ./.github/workflows/send-mail.yml
+    secrets: inherit
+    with:
+      subject: "Scheduler FAILURE - ${{ needs.scheduler.outputs.environment || 'unknown' }} (${{ needs.scheduler.outputs.action || 'unknown' }})"
+      message: |
+        <b>Error:</b> ${{ needs.scheduler.outputs.error }}
+
+      status: failure
+      from: "manikandan.ramamoorthy@cxontology.com"
+      to: "manishram2019@gmail.com"
+ 
