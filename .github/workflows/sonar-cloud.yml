@@ -17,21 +17,15 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0    # Needed for proper code analysis
+          fetch-depth: 0
 
-      # -------------------------
       # Run SonarCloud Scan
-      # -------------------------
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@v2
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        with:
-          projectBaseDir: "."  # Sonar will automatically load sonar-project.properties
 
-      # -------------------------
       # Quality Gate Check
-      # -------------------------
       - name: SonarCloud Quality Gate
         uses: SonarSource/sonarcloud-github-action@v2
         with:
