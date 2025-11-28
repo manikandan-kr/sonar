@@ -45,7 +45,7 @@ jobs:
       - name: Run Tests with Coverage
         run: |
           coverage run -m pytest
-          coverage xml  # <-- Creates coverage.xml file
+          coverage xml
 
       # -------------------------
       # SonarCloud Scan
@@ -55,14 +55,36 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
-          projectBaseDir: "."  # It will read sonar-project.properties automatically
+          projectBaseDir: "."
 
       # -------------------------
       # Quality Gate Check
       # -------------------------
       - name: SonarCloud Quality Gate
+        id: qualitygate
         uses: SonarSource/sonarcloud-github-action@v2
         with:
           wait-for-quality-gate: true
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      # -------------------------
+      # Print Quality Gate Result
+      # -------------------------
+      - name: Print Quality Gate Status
+        run: |
+          echo "Quality Gate Status → ${{ steps.qualitygate.outputs.quality-gate-status }}"
+
+      # -------------------------
+      # Conditional Deployment Check
+      # -------------------------
+      - name: Check if deployment should proceed
+        if: ${{ steps.qualitygate.outputs.quality-gate-status != 'PASSED' }}
+        run: |
+          echo " QUALITY GATE FAILED. Deployment will NOT proceed."
+          exit 1
+
+      - name: Continue deployment
+        if: ${{ steps.qualitygate.outputs.quality-gate-status == 'PASSED' }}
+        run: |
+          echo "QUALITY GATE PASSED. Proceeding to deployment..."
