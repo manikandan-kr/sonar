@@ -13,6 +13,9 @@ jobs:
     name: Run SonarCloud with Coverage
     runs-on: ubuntu-latest
 
+    env:
+      QUALITY_GATE_ENFORCE: "true"     # <--- Your toggle (true/false)
+
     steps:
       # -------------------------
       # Checkout Code
@@ -61,7 +64,7 @@ jobs:
       # Quality Gate Check
       # -------------------------
       - name: SonarCloud Quality Gate
-        id: qualitygate
+        id: quality
         uses: SonarSource/sonarcloud-github-action@v2
         with:
           wait-for-quality-gate: true
@@ -69,22 +72,20 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
       # -------------------------
-      # Print Quality Gate Result
+      # Enforce QG Result (Pass/Fail Logic)
       # -------------------------
-      - name: Print Quality Gate Status
+      - name: Enforce Quality Gate Result
         run: |
-          echo "Quality Gate Status → ${{ steps.qualitygate.outputs.quality-gate-status }}"
+          echo "QUALITY_GATE_ENFORCE = $QUALITY_GATE_ENFORCE"
+          echo "Quality Gate Status = ${{ steps.quality.outputs.quality-gate-status }}"
 
-      # -------------------------
-      # Conditional Deployment Check
-      # -------------------------
-      - name: Check if deployment should proceed
-        if: ${{ steps.qualitygate.outputs.quality-gate-status != 'PASSED' }}
-        run: |
-          echo " QUALITY GATE FAILED. Deployment will NOT proceed."
-          exit 1
-
-      - name: Continue deployment
-        if: ${{ steps.qualitygate.outputs.quality-gate-status == 'PASSED' }}
-        run: |
-          echo "QUALITY GATE PASSED. Proceeding to deployment..."
+          if [[ "$QUALITY_GATE_ENFORCE" == "true" ]]; then
+            if [[ "${{ steps.quality.outputs.quality-gate-status }}" != "PASSED" ]]; then
+              echo "❌ Quality Gate FAILED → Deployment BLOCKED"
+              exit 1
+            else
+              echo "✅ Quality Gate PASSED → Deployment ALLOWED"
+            fi
+          else
+            echo "⚠️ QUALITY_GATE_ENFORCE = false → Deployment WILL CONTINUE EVEN IF QG FAILS"
+          fi
