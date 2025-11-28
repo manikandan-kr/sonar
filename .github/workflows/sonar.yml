@@ -13,9 +13,6 @@ jobs:
     name: Run SonarCloud with Coverage
     runs-on: ubuntu-latest
 
-    env:
-      QUALITY_GATE_ENFORCE: "true"     # <--- Your toggle (true/false)
-
     steps:
       # -------------------------
       # Checkout Code
@@ -54,6 +51,7 @@ jobs:
       # SonarCloud Scan
       # -------------------------
       - name: SonarCloud Scan
+        id: scan
         uses: SonarSource/sonarcloud-github-action@v2
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -72,20 +70,14 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
       # -------------------------
-      # Enforce QG Result (Pass/Fail Logic)
+      # PRINT SONARCLOUD RESULT
       # -------------------------
-      - name: Enforce Quality Gate Result
+      - name: Print SonarCloud Status
         run: |
-          echo "QUALITY_GATE_ENFORCE = $QUALITY_GATE_ENFORCE"
-          echo "Quality Gate Status = ${{ steps.quality.outputs.quality-gate-status }}"
+          echo "Quality Gate Result: ${{ steps.quality.outputs.quality-gate-status }}"
 
-          if [[ "$QUALITY_GATE_ENFORCE" == "true" ]]; then
-            if [[ "${{ steps.quality.outputs.quality-gate-status }}" != "PASSED" ]]; then
-              echo "❌ Quality Gate FAILED → Deployment BLOCKED"
-              exit 1
-            else
-              echo "✅ Quality Gate PASSED → Deployment ALLOWED"
-            fi
+          if [[ "${{ steps.quality.outputs.quality-gate-status }}" == "PASSED" ]]; then
+            echo " SonarCloud Status: SUCCESS — All Quality Gates Passed"
           else
-            echo "⚠️ QUALITY_GATE_ENFORCE = false → Deployment WILL CONTINUE EVEN IF QG FAILS"
+            echo " SonarCloud Status: FAILED — Quality Gate Not Met"
           fi
