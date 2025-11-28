@@ -1,9 +1,9 @@
 name: Azure Scheduler
 
 on:
-  schedule:
-    - cron: "25 1 * * *"
-    - cron: "35 1 * * *"
+  # schedule:
+  #   - cron: "25 1 * * *"
+  #   - cron: "35 1 * * *"
 
 
   workflow_dispatch:
@@ -42,8 +42,8 @@ jobs:
         run: |
           cat > config.yml <<EOF
           rules:
-            - { environment: dev,     cron: "25 1 * * *",  action: start }
-            - { environment: dev,     cron: "35 1 * * *", action: stop }
+            # - { environment: dev,     cron: "25 1 * * *",  action: start }
+            # - { environment: dev,     cron: "35 1 * * *", action: stop }
           apps:
             dev:
               app: "dxc-content-agent-dev"
