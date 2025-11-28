@@ -6,9 +6,9 @@ client = TestClient(app)
 def test_read_root():
     response = client.get("/")
     assert response.status_code == 200
-    assert response.json() == {"message": "Hello from FastAPI - Sonar Test Project"}
+    assert response.json() == {"message": "Hello, World!"}
 
 def test_add_numbers():
-    response = client.get("/add/2/3")
+    response = client.get("/add/3/4")
     assert response.status_code == 200
-    assert response.json()["result"] == 5
+    assert response.json() == {"result": 7}
