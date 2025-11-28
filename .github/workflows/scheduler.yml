@@ -2,9 +2,8 @@ name: Azure Scheduler
 
 on:
   schedule:
-    - cron: "25 1 * * *"
-    - cron: "35 1 * * *"
-
+    - cron: "30 4 * * *"
+    - cron: "30 16 * * *"
 
   workflow_dispatch:
     inputs:
@@ -18,7 +17,6 @@ on:
         options: [start, stop]
 
 jobs:
-
   scheduler:
     runs-on: ubuntu-latest
 
@@ -29,32 +27,28 @@ jobs:
 
     steps:
 
-      - name: Debug Inputs
+      # Debug
+      - name: DEBUG Inputs
         run: |
           echo "manual env='${{ github.event.inputs.environment }}'"
           echo "manual action='${{ github.event.inputs.action }}'"
           echo "schedule='${{ github.event.schedule }}'"
-      ###################################################################
-      # INLINE CONFIG – NO EXTERNAL FILES
-      ###################################################################
-      - name: Load Inline Config
-        id: config
+
+      - name: Build Config
         run: |
           cat > config.yml <<EOF
           rules:
-            - { environment: dev,     cron: "25 1 * * *",  action: start }
-            - { environment: dev,     cron: "35 1 * * *", action: stop }
-          apps:
-            dev:
-              app: "dxc-content-agent-dev"
-              rg:  "CXO-F1"
-            
+            - environment: dev
+              cron: "30 4 * * *"
+              action: start
+            - environment: dev
+              cron: "30 16 * * *"
+              action: stop
+
           EOF
-          echo "Using inline config:"
+
           cat config.yml
-      ###################################################################
-      # RULE DECISION
-      ###################################################################
+
       - name: Determine Rule
         id: decide
         run: |
@@ -64,31 +58,44 @@ jobs:
             echo "action=${{ github.event.inputs.action }}" >> $GITHUB_OUTPUT
             exit 0
           fi
+
           CURRENT_CRON='${{ github.event.schedule }}'
+
+          echo "Incoming cron='$CURRENT_CRON'"
+          echo "Config file cron values:"
+          yq '.rules[].cron' config.yml
+
+          # Normalize — remove quotes, trim whitespace
           NORMAL=$(echo "$CURRENT_CRON" | sed 's/"//g' | xargs)
+
+          echo "Normalized cron='$NORMAL'"
+
           MATCH=$(yq ".rules[] | select(.cron == \"$NORMAL\")" config.yml || true)
+
+          echo "Matched entry:"
+          echo "$MATCH"
+
           ENV=$(echo "$MATCH" | yq '.environment' || true)
           ACT=$(echo "$MATCH" | yq '.action' || true)
+
           if [[ -z "$ENV" || "$ENV" == "null" ]]; then
-            echo "::error::No cron rule matched for '$NORMAL'"
+            echo "::error::No matching cron rule for '$NORMAL'"
             exit 1
           fi
+
           echo "environment=$ENV" >> $GITHUB_OUTPUT
           echo "action=$ACT" >> $GITHUB_OUTPUT
-      ###################################################################
-      # MAP ENV → APP / RG (INLINE)
-      ###################################################################
+
       - name: Map Environment
         id: map
         run: |
           ENV="${{ steps.decide.outputs.environment }}"
-          APP=$(yq ".apps.${ENV}.app" config.yml)
-          RG=$(yq ".apps.${ENV}.rg" config.yml)
+          APP=$(yq ".${ENV}.app" apps.yml)
+          RG=$(yq ".${ENV}.rg" apps.yml)
+
           echo "app=$APP" >> $GITHUB_OUTPUT
           echo "rg=$RG" >> $GITHUB_OUTPUT
-      ###################################################################
-      # AZURE LOGIN + START/STOP
-      ###################################################################
+
       - name: Azure Login
         uses: azure/login@v1
         with:
@@ -101,19 +108,17 @@ jobs:
           APP="${{ steps.map.outputs.app }}"
           RG="${{ steps.map.outputs.rg }}"
           SUB="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+
           echo "Executing action='$ACTION' for app='$APP'"
+
           if [[ "$ACTION" == "start" ]]; then
-            az rest --method post \
-              --url "https://management.azure.com/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.App/containerApps/$APP/start?api-version=2023-05-01"
+            az rest --method post --url \
+              "https://management.azure.com/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.App/containerApps/$APP/start?api-version=2023-05-01"
           else
-            az rest --method post \
-              --url "https://management.azure.com/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.App/containerApps/$APP/stop?api-version=2023-05-01"
+            az rest --method post --url \
+              "https://management.azure.com/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.App/containerApps/$APP/stop?api-version=2023-05-01"
           fi
 
-
-      ###################################################################
-      # CAPTURE ERRORS
-      ###################################################################
       - name: Capture Error
         id: capture_error
         if: always()
@@ -123,9 +128,7 @@ jobs:
           else
             echo "error=" >> $GITHUB_OUTPUT
 
-  #######################################################################
-  # SUCCESS EMAIL
-  #######################################################################
+
   success_email:
     needs: scheduler
     if: success()
@@ -144,9 +147,6 @@ jobs:
       from: "manikandan.ramamoorthy@cxontology.com"
       to: "manishram2019@gmail.com"
 
-  #######################################################################
-  # FAILURE EMAIL
-  #######################################################################
   failure_email:
     needs: scheduler
     if: failure()
@@ -160,4 +160,3 @@ jobs:
       status: failure
       from: "manikandan.ramamoorthy@cxontology.com"
       to: "manishram2019@gmail.com"
- 
