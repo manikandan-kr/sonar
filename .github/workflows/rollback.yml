@@ -1,0 +1,133 @@
+name: Rollback Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to Rollback To (Example: Release_V2)"
+        required: true
+        type: string
+      environment:
+        description: "Environment to deploy"
+        required: true
+        type: choice
+        options: [dev]
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+
+    steps:
+
+    ########################################################################
+    # Step 1 — Validate Tag Exists
+    ########################################################################
+    - name: Validate Tag Exists
+      id: validate
+      run: |
+        TAG="${{ github.event.inputs.tag }}"
+        REPO="${{ github.repository }}"
+
+        echo "Validating tag $TAG..."
+
+        git ls-remote --tags https://github.com/$REPO.git | grep "refs/tags/$TAG$"
+        if [ $? -ne 0 ]; then
+          echo "ERROR: Tag $TAG does not exist."
+          echo "rollback_status=FAILED" >> $GITHUB_OUTPUT
+          exit 1
+        fi
+
+        echo "Tag exists."
+
+    ########################################################################
+    # Step 2 — Checkout Code at Tag
+    ########################################################################
+    - name: Checkout Repository @ Tag
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.tag }}
+        fetch-depth: 0
+
+    ########################################################################
+    # Step 3 — Build Container Image
+    ########################################################################
+    - name: Login to GHCR
+      run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+    - name: Build Container Image
+      id: build
+      run: |
+        TAG="${{ github.event.inputs.tag }}"
+        IMAGE="ghcr.io/${{ github.repository_owner }}/dxc-content-agent:${TAG}"
+
+        echo "Building image: $IMAGE"
+        docker build -t "$IMAGE" .
+
+        echo "image=$IMAGE" >> $GITHUB_OUTPUT
+
+    - name: Push Image to GHCR
+      run: |
+        docker push "${{ steps.build.outputs.image }}"
+
+    ########################################################################
+    # Step 4 — Deploy to Azure Container App
+    ########################################################################
+    - name: Azure Login
+      uses: azure/login@v2
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Map Environment
+      id: envmap
+      run: |
+        ENV="${{ github.event.inputs.environment }}"
+
+        # Only dev configured
+        if [[ "$ENV" == "dev" ]]; then
+          APP_NAME="dxc-content-agent-dev"
+          RG="CXO-F1"
+        fi
+
+        echo "app=$APP_NAME" >> $GITHUB_OUTPUT
+        echo "rg=$RG" >> $GITHUB_OUTPUT
+
+    - name: Deploy Container to Azure
+      id: deploy
+      run: |
+        IMAGE="${{ steps.build.outputs.image }}"
+        APP="${{ steps.envmap.outputs.app }}"
+        RG="${{ steps.envmap.outputs.rg }}"
+
+        echo "Deploying $IMAGE to Azure Container App: $APP"
+
+        az containerapp update \
+          --name "$APP" \
+          --resource-group "$RG" \
+          --image "$IMAGE"
+
+        echo "deploy_status=SUCCESS" >> $GITHUB_OUTPUT
+
+    ########################################################################
+    # Step 5 — Email Notification
+    ########################################################################
+    - name: Send Email Notification
+      if: always()
+      uses: dawidd6/action-send-mail@v3
+      with:
+        server_address: smtp.gmail.com
+        server_port: 587
+        username: ${{ secrets.EMAIL_USER }}
+        password: ${{ secrets.EMAIL_PASSWORD }}
+        subject: "Rollback Result - ${{ github.event.inputs.tag }}"
+        to: "team@example.com"
+        from: "GitHub Rollback <no-reply@example.com>"
+        body: |
+          Rollback Result
+          -------------------------
+          Tag:        ${{ github.event.inputs.tag }}
+          Environment: ${{ github.event.inputs.environment }}
+          Status:     ${{ steps.deploy.outputs.deploy_status || 'FAILED' }}
