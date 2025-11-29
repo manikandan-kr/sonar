@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release Tag to Rollback (Example: Release_V2)"
+        description: "Tag to rollback To"
         required: true
         type: string
       environment:
