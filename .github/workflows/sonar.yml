@@ -63,10 +63,10 @@ jobs:
           echo "Quality Gate Status: $STATUS"
           echo "status=$STATUS" >> $GITHUB_OUTPUT
 
-      - name: Print Final Result
-        run: |
-          if [[ "${{ steps.qgate.outputs.status }}" == "OK" || "${{ steps.qgate.outputs.status }}" == "PASSED" ]]; then
-            echo "OK"
-          else
-            echo "FAIL"
-          fi
+      # - name: Print Final Result
+      #   run: |
+      #     if [[ "${{ steps.qgate.outputs.status }}" == "OK" || "${{ steps.qgate.outputs.status }}" == "PASSED" ]]; then
+      #       echo "OK"
+      #     else
+      #       echo "FAIL"
+      #     fi
