@@ -33,7 +33,7 @@ jobs:
       - name: Run Tests with Coverage
         run: |
           coverage run -m pytest
-          coverage xml
+          coverage xml  # Generates coverage.xml for SonarCloud
 
       - name: SonarCloud Scan
         id: scan
@@ -51,10 +51,10 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-
-      - name: SonarCloud Status
+      - name: Check SonarCloud Status
         run: |
-          if [[ "${{ steps.quality.outputs.status }}" == "PASSED" ]]; then
+          echo "Quality Gate Status: ${{ steps.quality.outputs.quality-gate-status }}"
+          if [[ "${{ steps.quality.outputs.quality-gate-status }}" == "PASSED" ]]; then
             echo "OK"
           else
             echo "FAIL"
