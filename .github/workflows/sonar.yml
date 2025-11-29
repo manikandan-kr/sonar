@@ -2,12 +2,15 @@ name: SonarCloud Python Analysis
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
   pull_request:
-    branches: [ main ]
+    branches:
+      - main
 
 jobs:
   sonarcloud:
+    name: Run SonarCloud with Coverage
     runs-on: ubuntu-latest
 
     steps:
@@ -23,32 +26,46 @@ jobs:
 
       - name: Install dependencies
         run: |
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest coverage
+          pip install coverage pytest
 
       - name: Run Tests with Coverage
         run: |
           coverage run -m pytest
-          coverage xml
+          coverage xml  # Generates coverage.xml for SonarCloud
 
-      # -------- SCAN --------
-      - name: SonarCloud Scan
+      - name: Run SonarCloud Scan
+        id: scan
         uses: SonarSource/sonarcloud-github-action@v2
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          projectBaseDir: "."
 
-      # -------- QUALITY GATE --------
-      - name: SonarCloud Quality Gate
-        id: quality_gate
-        uses: SonarSource/sonarqube-quality-gate-action@v1
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
-      # -------- PRINT RESULT --------
-      - name: SonarCloud Status
+      - name: Extract Project Key from sonar-project.properties
+        id: project_key
         run: |
-          echo "Quality Gate Status: ${{ steps.quality_gate.outputs.quality-gate-status }}"
-          if [[ "${{ steps.quality_gate.outputs.quality-gate-status }}" == "PASSED" ]]; then
+          PROJECT_KEY=$(grep -oP '^sonar.projectKey=\K.*' sonar-project.properties)
+          echo "project_key=$PROJECT_KEY" >> $GITHUB_OUTPUT
+          echo "Detected project key: $PROJECT_KEY"
+
+      - name: Get Quality Gate Status
+        id: qgate
+        run: |
+          echo "Waiting for SonarCloud Quality Gate Result..."
+          sleep 15
+
+          STATUS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
+            "https://sonarcloud.io/api/qualitygates/project_status?projectKey=${{ steps.project_key.outputs.project_key }}" \
+            | jq -r '.projectStatus.status')
+
+          echo "Quality Gate Status: $STATUS"
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+
+      - name: Print Final Result
+        run: |
+          if [[ "${{ steps.qgate.outputs.status }}" == "OK" || "${{ steps.qgate.outputs.status }}" == "PASSED" ]]; then
             echo "OK"
           else
             echo "FAIL"
