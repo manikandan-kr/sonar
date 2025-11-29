@@ -13,6 +13,9 @@ jobs:
     name: Run SonarCloud with Coverage
     runs-on: ubuntu-latest
 
+    outputs:
+      proceed: ${{ steps.enforce.outputs.proceed }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -33,7 +36,7 @@ jobs:
       - name: Run Tests with Coverage
         run: |
           coverage run -m pytest
-          coverage xml  # Generates coverage.xml for SonarCloud
+          coverage xml
 
       - name: Run SonarCloud Scan
         id: scan
@@ -63,10 +66,40 @@ jobs:
           echo "Quality Gate Status: $STATUS"
           echo "status=$STATUS" >> $GITHUB_OUTPUT
 
-      # - name: Print Final Result
-      #   run: |
-      #     if [[ "${{ steps.qgate.outputs.status }}" == "OK" || "${{ steps.qgate.outputs.status }}" == "PASSED" ]]; then
-      #       echo "OK"
-      #     else
-      #       echo "FAIL"
-      #     fi
+      - name: Enforce Quality Gate
+        id: enforce
+        run: |
+          ENFORCE="${{ secrets.QUALITY_GATE_ENFORCE }}"
+          STATUS="${{ steps.qgate.outputs.status }}"
+
+          echo "Quality Gate: $STATUS"
+          echo "Enforcement: $ENFORCE"
+
+          if [[ "$ENFORCE" == "true" ]]; then
+            echo "Enforcement TRUE → Always deploy"
+            echo "proceed=true" >> $GITHUB_OUTPUT
+          else
+            if [[ "$STATUS" == "OK" || "$STATUS" == "PASSED" ]]; then
+              echo "Quality Gate OK → Deploy"
+              echo "proceed=true" >> $GITHUB_OUTPUT
+            else
+              echo "Quality Gate FAIL → Block deploy"
+              echo "proceed=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+  deploy:
+    name: Deploy Application
+    needs: sonarcloud
+    if: needs.sonarcloud.outputs.proceed == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deployment Started
+        run: echo "Deployment started because proceed=true"
+
+      # Put your actual deployment steps here
+      - name: Deploy
+        run: |
+          echo "Deploying application..."
+          # your deployment commands
