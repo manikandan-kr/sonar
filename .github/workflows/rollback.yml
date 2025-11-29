@@ -1,17 +1,17 @@
-name: Rollback Deployment
+name: Rollback Deployment (Rebuild-Based)
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to Rollback To (Example: Release_V2)"
+        description: "Release Tag to Rollback (Example: Release_V2)"
         required: true
         type: string
       environment:
-        description: "Environment to deploy"
+        description: "Environment"
         required: true
         type: choice
-        options: [dev]
+        options: [prod]
 
 permissions:
   contents: write
@@ -22,7 +22,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
     ########################################################################
     # Step 1 — Validate Tag Exists
     ########################################################################
@@ -32,28 +31,35 @@ jobs:
         TAG="${{ github.event.inputs.tag }}"
         REPO="${{ github.repository }}"
 
-        echo "Validating tag $TAG..."
-
+        echo "Validating tag: $TAG"
         git ls-remote --tags https://github.com/$REPO.git | grep "refs/tags/$TAG$"
+
         if [ $? -ne 0 ]; then
-          echo "ERROR: Tag $TAG does not exist."
+          echo "ERROR: Tag $TAG does not exist!"
           echo "rollback_status=FAILED" >> $GITHUB_OUTPUT
           exit 1
         fi
 
-        echo "Tag exists."
+        echo "Tag $TAG found."
 
     ########################################################################
-    # Step 2 — Checkout Code at Tag
+    # Step 2 — Checkout Code using rollback branch
     ########################################################################
-    - name: Checkout Repository @ Tag
+    - name: Checkout Repository
       uses: actions/checkout@v4
       with:
-        ref: ${{ github.event.inputs.tag }}
         fetch-depth: 0
 
+    - name: Checkout Tag Into New Branch
+      run: |
+        TAG="${{ github.event.inputs.tag }}"
+        BRANCH="rollback_${TAG}"
+
+        echo "Creating branch $BRANCH from tag $TAG"
+        git checkout "tags/$TAG" -b "$BRANCH"
+
     ########################################################################
-    # Step 3 — Build Container Image
+    # Step 3 — Build New Container Image
     ########################################################################
     - name: Login to GHCR
       run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
@@ -62,7 +68,7 @@ jobs:
       id: build
       run: |
         TAG="${{ github.event.inputs.tag }}"
-        IMAGE="ghcr.io/${{ github.repository_owner }}/dxc-content-agent:${TAG}"
+        IMAGE="ghcr.io/${{ github.repository_owner }}/dxc-content-agent:${TAG}-rollback"
 
         echo "Building image: $IMAGE"
         docker build -t "$IMAGE" .
@@ -71,38 +77,25 @@ jobs:
 
     - name: Push Image to GHCR
       run: |
+        echo "Pushing image: ${{ steps.build.outputs.image }}"
         docker push "${{ steps.build.outputs.image }}"
 
     ########################################################################
-    # Step 4 — Deploy to Azure Container App
+    # Step 4 — Deploy to Azure Container App (Prod)
     ########################################################################
     - name: Azure Login
       uses: azure/login@v2
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-    - name: Map Environment
-      id: envmap
-      run: |
-        ENV="${{ github.event.inputs.environment }}"
-
-        # Only dev configured
-        if [[ "$ENV" == "dev" ]]; then
-          APP_NAME="dxc-content-agent-dev"
-          RG="CXO-F1"
-        fi
-
-        echo "app=$APP_NAME" >> $GITHUB_OUTPUT
-        echo "rg=$RG" >> $GITHUB_OUTPUT
-
     - name: Deploy Container to Azure
       id: deploy
       run: |
         IMAGE="${{ steps.build.outputs.image }}"
-        APP="${{ steps.envmap.outputs.app }}"
-        RG="${{ steps.envmap.outputs.rg }}"
+        APP="dxc-content-agent-prod"
+        RG="rg-prod"
 
-        echo "Deploying $IMAGE to Azure Container App: $APP"
+        echo "Deploying rollback image to PROD: $IMAGE"
 
         az containerapp update \
           --name "$APP" \
@@ -112,7 +105,18 @@ jobs:
         echo "deploy_status=SUCCESS" >> $GITHUB_OUTPUT
 
     ########################################################################
-    # Step 5 — Email Notification
+    # Step 5 — Update GitHub Release (Mark As Rolled Back)
+    ########################################################################
+    - name: Update GitHub Release Info
+      uses: ncipollo/release-action@v1
+      with:
+        tag: ${{ github.event.inputs.tag }}
+        name: "Rollback - ${{ github.event.inputs.tag }}"
+        body: "Rollback performed. Image rebuilt and redeployed to PROD."
+        allowUpdates: true
+
+    ########################################################################
+    # Step 6 — Email Notification
     ########################################################################
     - name: Send Email Notification
       if: always()
@@ -126,8 +130,7 @@ jobs:
         to: "team@example.com"
         from: "GitHub Rollback <no-reply@example.com>"
         body: |
-          Rollback Result
-          -------------------------
-          Tag:        ${{ github.event.inputs.tag }}
+          Rollback Result:
+          Tag: ${{ github.event.inputs.tag }}
           Environment: ${{ github.event.inputs.environment }}
-          Status:     ${{ steps.deploy.outputs.deploy_status || 'FAILED' }}
+          Status: ${{ steps.deploy.outputs.deploy_status || 'FAILED' }}
