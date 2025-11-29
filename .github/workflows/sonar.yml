@@ -51,6 +51,7 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
+
       - name: SonarCloud Status
         run: |
           if [[ "${{ steps.quality.outputs.status }}" == "PASSED" ]]; then
