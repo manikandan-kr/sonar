@@ -1,4 +1,4 @@
-name: SonarCloud Python Analysis
+name: SonarCloud Python Analysis & Deploy
 
 on:
   push:
@@ -9,6 +9,9 @@ on:
       - main
 
 jobs:
+  ########################################################################
+  # JOB 1: SonarCloud + Tests + Quality Gate
+  ########################################################################
   sonarcloud:
     name: Run SonarCloud with Coverage
     runs-on: ubuntu-latest
@@ -43,10 +46,8 @@ jobs:
         uses: SonarSource/sonarcloud-github-action@v2
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        with:
-          projectBaseDir: "."
 
-      - name: Extract Project Key from sonar-project.properties
+      - name: Extract Project Key
         id: project_key
         run: |
           PROJECT_KEY=$(grep -oP '^sonar.projectKey=\K.*' sonar-project.properties)
@@ -56,7 +57,7 @@ jobs:
       - name: Get Quality Gate Status
         id: qgate
         run: |
-          echo "Waiting for SonarCloud Quality Gate Result..."
+          echo "Waiting for Sonar quality gate..."
           sleep 15
 
           STATUS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
@@ -69,37 +70,82 @@ jobs:
       - name: Enforce Quality Gate
         id: enforce
         run: |
-          ENFORCE="${{ secrets.QUALITY_GATE_ENFORCE }}"
           STATUS="${{ steps.qgate.outputs.status }}"
+          ENFORCE="${{ secrets.QUALITY_GATE_ENFORCE }}"
 
           echo "Quality Gate: $STATUS"
-          echo "Enforcement: $ENFORCE"
+          echo "Enforce Mode: $ENFORCE"
 
           if [[ "$ENFORCE" == "true" ]]; then
-            echo "Enforcement TRUE → Always deploy"
             echo "proceed=true" >> $GITHUB_OUTPUT
           else
             if [[ "$STATUS" == "OK" || "$STATUS" == "PASSED" ]]; then
-              echo "Quality Gate OK → Deploy"
               echo "proceed=true" >> $GITHUB_OUTPUT
             else
-              echo "Quality Gate FAIL → Block deploy"
               echo "proceed=false" >> $GITHUB_OUTPUT
             fi
           fi
 
+  ########################################################################
+  # JOB 2: DEPLOY TO AZURE ONLY IF QUALITY GATE PASSED
+  ########################################################################
   deploy:
-    name: Deploy Application
+    name: Build & Deploy to Azure Container Apps
     needs: sonarcloud
     if: needs.sonarcloud.outputs.proceed == 'true'
     runs-on: ubuntu-latest
 
-    steps:
-      - name: Deployment Started
-        run: echo "Deployment started because proceed=true"
+    env:
+      CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      GITHUB_USERNAME: ${{ secrets.GITHUB_USERNAME }}
+      GITHUB_PAT: ${{ secrets.GITHUB_PAT }}
+      LOCATION: "centralindia"
+      CONTAINER_APP_NAME: "dev-container"
+      RESOURCE_GROUP: "DXC-Agent"
+      ENVIRONMENT_NAME: "DXC-agent"
 
-      # Put your actual deployment steps here
-      - name: Deploy
-        run: |
-          echo "Deploying application..."
-          # your deployment commands
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: >-
+            {
+              "clientId": "${{ env.CLIENT_ID }}",
+              "clientSecret": "${{ env.CLIENT_SECRET }}",
+              "subscriptionId": "${{ env.SUBSCRIPTION_ID }}",
+              "tenantId": "${{ env.TENANT_ID }}"
+            }
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ env.GITHUB_USERNAME }}
+          password: ${{ env.GITHUB_PAT }}
+
+      - name: Build & Deploy Container App
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          appSourcePath: ${{ github.workspace }}
+          registryUrl: ghcr.io
+          registryUsername: ${{ env.GITHUB_USERNAME }}
+          registryPassword: ${{ env.GITHUB_PAT }}
+          containerAppName: ${{ env.CONTAINER_APP_NAME }}
+          resourceGroup: ${{ env.RESOURCE_GROUP }}
+          containerAppEnvironment: ${{ env.ENVIRONMENT_NAME }}
+          location: ${{ env.LOCATION }}
+          imageToBuild: ghcr.io/${{ env.GITHUB_USERNAME }}/dxc-content-agent:${{ github.sha }}
+          resources: |
+            {
+              "cpu": "2.0",
+              "memory": "4Gi"
+            }
+
+      - name: Deployment Completed
+        run: echo "Deployment successful!"
