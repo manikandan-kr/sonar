@@ -100,8 +100,8 @@ jobs:
       CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
       SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      GITHUB_USERNAME: ${{ secrets.GITHUB_USERNAME }}
-      GITHUB_PAT: ${{ secrets.GITHUB_PAT }}
+      GITHUB_USERNAME: ${{ secrets.GIT_USERNAME }}
+      GITHUB_PAT: ${{ secrets.GIT_PAT }}
       LOCATION: "centralindia"
       CONTAINER_APP_NAME: "dev-container"
       RESOURCE_GROUP: "DXC-Agent"
@@ -126,16 +126,16 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ env.GITHUB_USERNAME }}
-          password: ${{ env.GITHUB_PAT }}
+          username: ${{ env.GIT_USERNAME }}
+          password: ${{ env.GIT_PAT }}
 
       - name: Build & Deploy Container App
         uses: azure/container-apps-deploy-action@v1
         with:
           appSourcePath: ${{ github.workspace }}
           registryUrl: ghcr.io
-          registryUsername: ${{ env.GITHUB_USERNAME }}
-          registryPassword: ${{ env.GITHUB_PAT }}
+          registryUsername: ${{ env.GIT_USERNAME }}
+          registryPassword: ${{ env.GIT_PAT }}
           containerAppName: ${{ env.CONTAINER_APP_NAME }}
           resourceGroup: ${{ env.RESOURCE_GROUP }}
           containerAppEnvironment: ${{ env.ENVIRONMENT_NAME }}
