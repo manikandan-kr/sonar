@@ -126,16 +126,16 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ env.GIT_USERNAME }}
-          password: ${{ env.GIT_PAT }}
+          username: ${{ env.GITHUB_USERNAME }}
+          password: ${{ env.GITHUB_PAT }}
 
       - name: Build & Deploy Container App
         uses: azure/container-apps-deploy-action@v1
         with:
           appSourcePath: ${{ github.workspace }}
           registryUrl: ghcr.io
-          registryUsername: ${{ env.GIT_USERNAME }}
-          registryPassword: ${{ env.GIT_PAT }}
+          registryUsername: ${{ env.GITHUB_USERNAME }}
+          registryPassword: ${{ env.GITHUB_PAT }}
           containerAppName: ${{ env.CONTAINER_APP_NAME }}
           resourceGroup: ${{ env.RESOURCE_GROUP }}
           containerAppEnvironment: ${{ env.ENVIRONMENT_NAME }}
