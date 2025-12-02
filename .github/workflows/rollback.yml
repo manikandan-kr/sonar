@@ -121,7 +121,7 @@ jobs:
     ########################################################################
     - name: Send Notification Email
       if: always()
-      uses: ./.github/workflows/send-mail.yml
+      uses: ${{ github.repository }}/.github/workflows/send-mail.yml@main
       with:
         subject: "Rollback Result - ${{ github.event.inputs.tag }}"
         message: |
