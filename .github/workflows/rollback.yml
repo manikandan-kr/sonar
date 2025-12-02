@@ -115,73 +115,47 @@ jobs:
         body: "Rollback completed successfully. New rollback image deployed."
         allowUpdates: true
 
-    ########################################################################
-    # Step 6 — Email Notification (Microsoft Graph API)
-    ########################################################################
-    - name: Build HTML Email
-      id: html
-      if: always()
-      run: |
-        cat > email.html <<EOF
-        <html>
-        <body style="font-family: Arial, sans-serif;">
-          <div style="padding:20px;border:1px solid #dcdcdc;border-radius:8px;">
-            <h2 style="color:${{ steps.deploy.outputs.deploy_status == 'SUCCESS' && 'green' || 'red' }};">
-              Rollback Result - ${{ github.event.inputs.tag }}
-            </h2>
+  ########################################################################
+  # Step 6 — SUCCESS EMAIL NOTIFICATION
+  ########################################################################
+  success_email:
+    needs: rollback
+    if: success()
+    uses: ./.github/workflows/send-mail.yml
+    secrets: inherit
+    with:
+      subject: "Rollback SUCCESS - Tag: ${{ github.event.inputs.tag }}"
+      message: |
+        <b>Rollback Completed Successfully</b><br><br>
 
-            <p style="font-size:14px;">
-              <b>Tag:</b> ${{ github.event.inputs.tag }}<br>
-              <b>Environment:</b> ${{ github.event.inputs.environment }}<br>
-              <b>Status:</b> ${{ steps.deploy.outputs.deploy_status || 'FAILED' }}
-            </p>
+        <b>Tag:</b> ${{ github.event.inputs.tag }}<br>
+        <b>Environment:</b> ${{ github.event.inputs.environment }}<br>
+        <b>Status:</b> SUCCESS<br>
 
-            <hr/>
-            <p style="color:gray;font-size:12px;">
-              Automated Notification from GitHub Actions
-            </p>
-          </div>
-        </body>
-        </html>
-        EOF
+      status: success
+      from: "manikandan.ramamoorthy@cxontology.com"
+      to: "manikandan.ramamoorthy@cxontology.com"
 
-    - name: Get Access Token
-      id: token
-      if: always()
-      run: |
-        AUTH=$(curl -s -X POST \
-          -H "Content-Type: application/x-www-form-urlencoded" \
-          -d "client_id=${{ secrets.MAIL_CLIENT_ID }}" \
-          -d "scope=https://graph.microsoft.com/.default" \
-          -d "client_secret=${{ secrets.MAIL_CLIENT_SECRET }}" \
-          -d "grant_type=client_credentials" \
-          "https://login.microsoftonline.com/${{ secrets.MAIL_TENANT_ID }}/oauth2/v2.0/token")
+  ########################################################################
+  # Step 7 — FAILURE EMAIL NOTIFICATION
+  ########################################################################
+  failure_email:
+    needs: rollback
+    if: failure()
+    uses: ./.github/workflows/send-mail.yml
+    secrets: inherit
+    with:
+      subject: "Rollback FAILURE - Tag: ${{ github.event.inputs.tag }}"
+      message: |
+        <b>Rollback Failed!</b><br><br>
 
-        echo "token=$(echo $AUTH | jq -r '.access_token')" >> $GITHUB_OUTPUT
+        <b>Tag:</b> ${{ github.event.inputs.tag }}<br>
+        <b>Environment:</b> ${{ github.event.inputs.environment }}<br>
+        <b>Status:</b> FAILED<br>
 
-    - name: Send HTML Email
-      if: always()
-      run: |
-        BODY=$(sed 's/"/\\"/g' email.html | tr -d '\n')
-
-        curl -s -X POST \
-          -H "Authorization: Bearer ${{ steps.token.outputs.token }}" \
-          -H "Content-Type: application/json" \
-          -d "{
-            \"message\": {
-              \"subject\": \"Rollback Result - ${{ github.event.inputs.tag }}\",
-              \"body\": {
-                \"contentType\": \"HTML\",
-                \"content\": \"$BODY\"
-              },
-              \"toRecipients\": [
-                {\"emailAddress\":{\"address\":\"manikandan.ramamoorthy@cxontology.com\"}}
-              ]
-            },
-            \"saveToSentItems\": \"false\"
-          }" \
-          "https://graph.microsoft.com/v1.0/users/no-reply@cxontology.com/sendMail"
-
+      status: failure
+      from: "manikandan.ramamoorthy@cxontology.com"
+      to: "manikandan.ramamoorthy@cxontology.com"
 
 
     # ########################################################################
