@@ -118,19 +118,19 @@ jobs:
     ########################################################################
     # Step 6 — Notification Email
     ########################################################################
-    - name: Send Email Notification
-      if: always()
-      uses: dawidd6/action-send-mail@v3
-      with:
-        server_address: smtp.gmail.com
-        server_port: 587
-        username: ${{ secrets.EMAIL_USER }}
-        password: ${{ secrets.EMAIL_PASSWORD }}
-        subject: "Rollback Result - ${{ github.event.inputs.tag }}"
-        to: "team@example.com"
-        from: "GitHub Rollback <no-reply@example.com>"
-        body: |
-          Rollback Result:
-          Tag: ${{ github.event.inputs.tag }}
-          Environment: ${{ github.event.inputs.environment }}
-          Status: ${{ steps.deploy.outputs.deploy_status || 'FAILED' }}
+    # - name: Send Email Notification
+    #   if: always()
+    #   uses: dawidd6/action-send-mail@v3
+    #   with:
+    #     server_address: smtp.gmail.com
+    #     server_port: 587
+    #     username: ${{ secrets.EMAIL_USER }}
+    #     password: ${{ secrets.EMAIL_PASSWORD }}
+    #     subject: "Rollback Result - ${{ github.event.inputs.tag }}"
+    #     to: "team@example.com"
+    #     from: "GitHub Rollback <no-reply@example.com>"
+    #     body: |
+    #       Rollback Result:
+    #       Tag: ${{ github.event.inputs.tag }}
+    #       Environment: ${{ github.event.inputs.environment }}
+    #       Status: ${{ steps.deploy.outputs.deploy_status || 'FAILED' }}
