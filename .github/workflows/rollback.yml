@@ -116,8 +116,32 @@ jobs:
         allowUpdates: true
 
     ########################################################################
-    # Step 6 — Notification Email
+    # Step 6 — Notification Email (Using Reusable Workflow)
     ########################################################################
+    - name: Send Notification Email
+      if: always()
+      uses: ./.github/workflows/send-mail.yml
+      with:
+        subject: "Rollback Result - ${{ github.event.inputs.tag }}"
+        message: |
+          Rollback Result:
+          Tag: ${{ github.event.inputs.tag }}
+          Environment: ${{ github.event.inputs.environment }}
+          Status: ${{ steps.deploy.outputs.deploy_status || 'FAILED' }}
+
+        status: ${{ steps.deploy.outputs.deploy_status == 'SUCCESS' && 'success' || 'failed' }}
+        from: "manikandan.ramamoorthy@cxontology.com"
+        to: "manikandan.ramamoorthy@cxontology.com"
+
+      secrets:
+        MAIL_TENANT_ID: ${{ secrets.MAIL_TENANT_ID }}
+        MAIL_CLIENT_ID: ${{ secrets.MAIL_CLIENT_ID }}
+        MAIL_CLIENT_SECRET: ${{ secrets.MAIL_CLIENT_SECRET }}
+
+
+    # ########################################################################
+    # # Step 6 — Notification Email
+    # ########################################################################
     # - name: Send Email Notification
     #   if: always()
     #   uses: dawidd6/action-send-mail@v3
