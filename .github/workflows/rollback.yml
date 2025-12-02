@@ -133,10 +133,10 @@ jobs:
         from: "manikandan.ramamoorthy@cxontology.com"
         to: "manikandan.ramamoorthy@cxontology.com"
 
-      secrets:
-        MAIL_TENANT_ID: ${{ secrets.MAIL_TENANT_ID }}
-        MAIL_CLIENT_ID: ${{ secrets.MAIL_CLIENT_ID }}
-        MAIL_CLIENT_SECRET: ${{ secrets.MAIL_CLIENT_SECRET }}
+      # secrets:
+      #   MAIL_TENANT_ID: ${{ secrets.MAIL_TENANT_ID }}
+      #   MAIL_CLIENT_ID: ${{ secrets.MAIL_CLIENT_ID }}
+      #   MAIL_CLIENT_SECRET: ${{ secrets.MAIL_CLIENT_SECRET }}
 
 
     # ########################################################################
