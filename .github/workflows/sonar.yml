@@ -168,7 +168,7 @@ env:
   # set to "true" to stop deploy when Quality Gate FAILS
   QUALITY_GATE_ENFORCE: "false"
   GIT_TOKEN: "ghp_tPeuYuuIBp9xiIT522lvJ42XmtH"
-  GIT_USERNAME: "manikandan-kr"
+  GIT_USERNAME: ${{ secrets.GIT_USERNAME }}
 
 permissions:
   contents: write
