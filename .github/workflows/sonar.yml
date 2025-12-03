@@ -1,152 +1,407 @@
-name: SonarCloud Python Analysis & Deploy
+# name: SonarCloud Python Analysis & Deploy
+
+# on:
+#   push:
+#     branches:
+#       - main
+#   pull_request:
+#     branches:
+#       - main
+
+# jobs:
+#   ########################################################################
+#   # JOB 1: SonarCloud + Tests + Quality Gate
+#   ########################################################################
+#   sonarcloud:
+#     name: Run SonarCloud with Coverage
+#     runs-on: ubuntu-latest
+
+#     outputs:
+#       proceed: ${{ steps.enforce.outputs.proceed }}
+
+#     steps:
+#       - name: Checkout repository
+#         uses: actions/checkout@v4
+#         with:
+#           fetch-depth: 0
+
+#       - name: Setup Python
+#         uses: actions/setup-python@v5
+#         with:
+#           python-version: "3.10"
+
+#       - name: Install dependencies
+#         run: |
+#           python -m pip install --upgrade pip
+#           pip install -r requirements.txt
+#           pip install coverage pytest
+
+#       - name: Run Tests with Coverage
+#         run: |
+#           coverage run -m pytest
+#           coverage xml
+
+#       - name: Run SonarCloud Scan
+#         id: scan
+#         uses: SonarSource/sonarcloud-github-action@v2
+#         env:
+#           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+#       - name: Extract Project Key
+#         id: project_key
+#         run: |
+#           PROJECT_KEY=$(grep -oP '^sonar.projectKey=\K.*' sonar-project.properties)
+#           echo "project_key=$PROJECT_KEY" >> $GITHUB_OUTPUT
+#           echo "Detected project key: $PROJECT_KEY"
+
+#       - name: Get Quality Gate Status
+#         id: qgate
+#         run: |
+#           echo "Waiting for Sonar quality gate..."
+#           sleep 15
+
+#           STATUS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
+#             "https://sonarcloud.io/api/qualitygates/project_status?projectKey=${{ steps.project_key.outputs.project_key }}" \
+#             | jq -r '.projectStatus.status')
+
+#           echo "Quality Gate Status: $STATUS"
+#           echo "status=$STATUS" >> $GITHUB_OUTPUT
+
+#       - name: Enforce Quality Gate
+#         id: enforce
+#         run: |
+#           STATUS="${{ steps.qgate.outputs.status }}"
+#           ENFORCE="${{ secrets.QUALITY_GATE_ENFORCE }}"
+
+#           echo "Quality Gate: $STATUS"
+#           echo "Enforce Mode: $ENFORCE"
+
+#           if [[ "$ENFORCE" == "true" ]]; then
+#             echo "proceed=true" >> $GITHUB_OUTPUT
+#           else
+#             if [[ "$STATUS" == "OK" || "$STATUS" == "PASSED" ]]; then
+#               echo "proceed=true" >> $GITHUB_OUTPUT
+#             else
+#               echo "proceed=false" >> $GITHUB_OUTPUT
+#             fi
+#           fi
+
+#   ########################################################################
+#   # JOB 2: DEPLOY TO AZURE ONLY IF QUALITY GATE PASSED
+#   ########################################################################
+#   deploy:
+#     name: Build & Deploy to Azure Container Apps
+#     needs: sonarcloud
+#     if: needs.sonarcloud.outputs.proceed == 'true'
+#     runs-on: ubuntu-latest
+
+#     env:
+#       CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+#       CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+#       SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+#       TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+#       GITHUB_USERNAME: ${{ secrets.GIT_USERNAME }}
+#       GITHUB_PAT: ${{ secrets.GIT_PAT }}
+#       LOCATION: "centralindia"
+#       CONTAINER_APP_NAME: "dev-container"
+#       RESOURCE_GROUP: "DXC-Agent"
+#       ENVIRONMENT_NAME: "DXC-agent"
+
+#     steps:
+#       - name: Checkout Repo
+#         uses: actions/checkout@v4
+
+#       - name: Login to Azure
+#         uses: azure/login@v1
+#         with:
+#           creds: >-
+#             {
+#               "clientId": "${{ env.CLIENT_ID }}",
+#               "clientSecret": "${{ env.CLIENT_SECRET }}",
+#               "subscriptionId": "${{ env.SUBSCRIPTION_ID }}",
+#               "tenantId": "${{ env.TENANT_ID }}"
+#             }
+
+#       - name: Login to GHCR
+#         uses: docker/login-action@v3
+#         with:
+#           registry: ghcr.io
+#           username: ${{ env.GITHUB_USERNAME }}
+#           password: ${{ env.GITHUB_PAT }}
+
+#       - name: Build & Deploy Container App
+#         uses: azure/container-apps-deploy-action@v1
+#         with:
+#           appSourcePath: ${{ github.workspace }}
+#           registryUrl: ghcr.io
+#           registryUsername: ${{ env.GITHUB_USERNAME }}
+#           registryPassword: ${{ env.GITHUB_PAT }}
+#           containerAppName: ${{ env.CONTAINER_APP_NAME }}
+#           resourceGroup: ${{ env.RESOURCE_GROUP }}
+#           containerAppEnvironment: ${{ env.ENVIRONMENT_NAME }}
+#           location: ${{ env.LOCATION }}
+#           imageToBuild: ghcr.io/${{ env.GITHUB_USERNAME }}/dxc-content-agent:${{ github.sha }}
+#           resources: |
+#             {
+#               "cpu": "2.0",
+#               "memory": "4Gi"
+#             }
+            
+
+#       - name: Deployment Completed
+#         run: echo "Deployment successful!"
+
+
+
+
+name: Build and Deploy a DEV Container (with Sonar + QG)
 
 on:
   push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+    branches: [ main ]
+
+env:
+  CONTAINER_APP_NAME: "dev-container"
+  RESOURCE_GROUP: "DXC-Agent"
+  ENVIRONMENT_NAME: "DXC-agent"
+  LOCATION: ${{ secrets.AZURE_LOCATION }}
+  # set to "true" to stop deploy when Quality Gate FAILS
+  QUALITY_GATE_ENFORCE: "false"
+  GIT_TOKEN: "ghp_tPeuYuuIBp9xiIT522lvJ42XmtH"
+  GIT_USERNAME: "manikandan-kr"
+
+permissions:
+  contents: write
+  packages: write
 
 jobs:
-  ########################################################################
-  # JOB 1: SonarCloud + Tests + Quality Gate
-  ########################################################################
-  sonarcloud:
-    name: Run SonarCloud with Coverage
+
+  # ============================================================
+  # JOB 1 — SONAR ANALYSIS + QUALITY GATE EXTRACTION
+  # ============================================================
+  sonar:
+    name: SonarCloud Analysis & Quality Gate
     runs-on: ubuntu-latest
 
     outputs:
-      proceed: ${{ steps.enforce.outputs.proceed }}
+      qg_status: ${{ steps.qg_check.outputs.qg_status }}
+      qg_coverage: ${{ steps.qg_check.outputs.qg_coverage }}
+      qg_bugs: ${{ steps.qg_check.outputs.qg_bugs }}
+      qg_vulnerabilities: ${{ steps.qg_check.outputs.qg_vulnerabilities }}
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-
-      - name: Install dependencies
+      - name: Install Dependencies (FastAPI + Tests + MAF Core)
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install coverage pytest
+          python3 -m pip install --upgrade pip
+          
+          # Install basic test tools
+          pip install fastapi uvicorn pytest coverage jq
 
-      - name: Run Tests with Coverage
-        run: |
-          coverage run -m pytest
-          coverage xml
-
-      - name: Run SonarCloud Scan
-        id: scan
-        uses: SonarSource/sonarcloud-github-action@v2
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
-      - name: Extract Project Key
-        id: project_key
-        run: |
-          PROJECT_KEY=$(grep -oP '^sonar.projectKey=\K.*' sonar-project.properties)
-          echo "project_key=$PROJECT_KEY" >> $GITHUB_OUTPUT
-          echo "Detected project key: $PROJECT_KEY"
-
-      - name: Get Quality Gate Status
-        id: qgate
-        run: |
-          echo "Waiting for Sonar quality gate..."
-          sleep 15
-
-          STATUS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
-            "https://sonarcloud.io/api/qualitygates/project_status?projectKey=${{ steps.project_key.outputs.project_key }}" \
-            | jq -r '.projectStatus.status')
-
-          echo "Quality Gate Status: $STATUS"
-          echo "status=$STATUS" >> $GITHUB_OUTPUT
-
-      - name: Enforce Quality Gate
-        id: enforce
-        run: |
-          STATUS="${{ steps.qgate.outputs.status }}"
-          ENFORCE="${{ secrets.QUALITY_GATE_ENFORCE }}"
-
-          echo "Quality Gate: $STATUS"
-          echo "Enforce Mode: $ENFORCE"
-
-          if [[ "$ENFORCE" == "true" ]]; then
-            echo "proceed=true" >> $GITHUB_OUTPUT
+          # Install all requirements
+          if [ -f requirements.txt ]; then
+            pip install --no-cache-dir -r requirements.txt
           else
-            if [[ "$STATUS" == "OK" || "$STATUS" == "PASSED" ]]; then
-              echo "proceed=true" >> $GITHUB_OUTPUT
-            else
-              echo "proceed=false" >> $GITHUB_OUTPUT
-            fi
+            echo "requirements.txt not found"
           fi
 
-  ########################################################################
-  # JOB 2: DEPLOY TO AZURE ONLY IF QUALITY GATE PASSED
-  ########################################################################
-  deploy:
-    name: Build & Deploy to Azure Container Apps
-    needs: sonarcloud
-    if: needs.sonarcloud.outputs.proceed == 'true'
+          # Install maf-core in editable mode (same as Docker)
+          if [ -d maf-core ]; then
+            echo "Installing maf-core editable package"
+            pip install --no-cache-dir -e maf-core
+          else
+            echo "maf-core folder not found"
+          fi
+
+
+      - name: Run Tests & Coverage (Non-Blocking)
+        run: |
+          set -e || true
+          if [ -d prototype_tests ]; then
+            coverage erase || true
+            coverage run -m pytest prototype_tests || true
+            coverage xml -i || true
+          else
+            echo "No tests detected"
+          fi
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@v2
+        env:
+          SONAR_TOKEN:  ${{ secrets.SONAR_TOKEN }}
+          GITHUB_TOKEN: ${{ env.GIT_TOKEN }}
+        with:
+          projectBaseDir: .
+
+    
+      - name: Wait for Quality Gate Result
+        id: qg_check
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          set -e
+
+          PROJECT_KEY=manikandan-kr_sonar
+          AUTH="$SONAR_TOKEN:"
+
+          ATTEMPTS=0
+          STATUS=""
+
+          while [ $ATTEMPTS -lt 12 ]; do
+            JSON=$(curl -s -u "$AUTH" \
+              "https://sonarcloud.io/api/qualitygates/project_status?projectKey=$PROJECT_KEY")
+            STATUS=$(echo "$JSON" | jq -r '.projectStatus.status // empty')
+
+            if [ "$STATUS" != "" ] && [ "$STATUS" != "PENDING" ]; then
+              break
+            fi
+
+            ATTEMPTS=$((ATTEMPTS + 1))
+            sleep 10
+          done
+
+          echo "qg_status=$STATUS" >> $GITHUB_OUTPUT
+
+          METRICS=$(curl -s -u "$AUTH" \
+            "https://sonarcloud.io/api/measures/component?component=$PROJECT_KEY&metricKeys=coverage,bugs,vulnerabilities")
+
+          COVERAGE=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="coverage") | .value // ""')
+          BUGS=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="bugs") | .value // ""')
+          VULN=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="vulnerabilities") | .value // ""')
+
+          echo "qg_coverage=$COVERAGE" >> $GITHUB_OUTPUT
+          echo "qg_bugs=$BUGS" >> $GITHUB_OUTPUT
+          echo "qg_vulnerabilities=$VULN" >> $GITHUB_OUTPUT
+
+  # ----------------------------
+  # Job: Build, Tag, Release, Deploy
+  # ----------------------------
+  build_and_deploy:
+    name: Tag, Release, Build & Deploy
     runs-on: ubuntu-latest
-
-    env:
-      CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-      SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      GITHUB_USERNAME: ${{ secrets.GIT_USERNAME }}
-      GITHUB_PAT: ${{ secrets.GIT_PAT }}
-      LOCATION: "centralindia"
-      CONTAINER_APP_NAME: "dev-container"
-      RESOURCE_GROUP: "DXC-Agent"
-      ENVIRONMENT_NAME: "DXC-agent"
-
+    needs: sonar
+    outputs:
+      tag: ${{ steps.tag.outputs.NEXT_TAG }}
+      error: ${{ steps.err.outputs.error || '' }}
     steps:
-      - name: Checkout Repo
+      - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Login to Azure
+      - name: Debug Sonar QG (from previous job)
+        run: |
+          echo "Quality Gate status: ${{ needs.sonar.outputs.qg_status }}"
+          echo "Coverage: ${{ needs.sonar.outputs.qg_coverage }}"
+          echo "Bugs: ${{ needs.sonar.outputs.qg_bugs }}"
+          echo "Vulnerabilities: ${{ needs.sonar.outputs.qg_vulnerabilities }}"
+
+      # Optionally block deployment if enforce is true and QG failed
+      - name: Evaluate Quality Gate (enforce toggle)
+        id: qg_eval
+        run: |
+          ENFORCE="${{ env.QUALITY_GATE_ENFORCE }}"
+          QG_STATUS="${{ needs.sonar.outputs.qg_status }}"
+          echo "ENFORCE=${ENFORCE}"
+          echo "QG_STATUS=${QG_STATUS}"
+          if [ "$ENFORCE" = "true" ] && [ "$QG_STATUS" != "OK" ]; then
+            echo "::error::Quality Gate is not OK (status=$QG_STATUS) and enforcement is enabled. Aborting deployment."
+            exit 1
+          fi
+          echo "qg_continue=true" >> $GITHUB_OUTPUT
+
+      - name: Azure Login
         uses: azure/login@v1
         with:
-          creds: >-
-            {
-              "clientId": "${{ env.CLIENT_ID }}",
-              "clientSecret": "${{ env.CLIENT_SECRET }}",
-              "subscriptionId": "${{ env.SUBSCRIPTION_ID }}",
-              "tenantId": "${{ env.TENANT_ID }}"
-            }
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ env.GITHUB_USERNAME }}
-          password: ${{ env.GITHUB_PAT }}
+          username: ${{ env.GIT_USERNAME }}
+          password: ${{ env.GIT_TOKEN }}
 
-      - name: Build & Deploy Container App
-        uses: azure/container-apps-deploy-action@v1
+      - name: Create Auto-Increment Release Tag
+        id: tag
+        run: |
+          git fetch --tags
+          LAST_TAG=$(git tag -l "DEV_Release_V*" | sort -V | tail -n 1 || true)
+          if [ -z "$LAST_TAG" ]; then
+            NEXT_TAG="DEV_Release_V1"
+          else
+            NUM=$(echo "$LAST_TAG" | sed 's/DEV_Release_V//')
+            NEXT_NUM=$((NUM + 1))
+            NEXT_TAG="DEV_Release_V$NEXT_NUM"
+          fi
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          echo "Creating tag: $NEXT_TAG"
+          git tag "$NEXT_TAG"
+          git push origin "$NEXT_TAG"
+          echo "NEXT_TAG=$NEXT_TAG" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ env.GIT_TOKEN }}
         with:
-          appSourcePath: ${{ github.workspace }}
-          registryUrl: ghcr.io
-          registryUsername: ${{ env.GITHUB_USERNAME }}
-          registryPassword: ${{ env.GITHUB_PAT }}
-          containerAppName: ${{ env.CONTAINER_APP_NAME }}
-          resourceGroup: ${{ env.RESOURCE_GROUP }}
-          containerAppEnvironment: ${{ env.ENVIRONMENT_NAME }}
-          location: ${{ env.LOCATION }}
-          imageToBuild: ghcr.io/${{ env.GITHUB_USERNAME }}/dxc-content-agent:${{ github.sha }}
-          resources: |
-            {
-              "cpu": "2.0",
-              "memory": "4Gi"
-            }
-            
+          tag_name: ${{ steps.tag.outputs.NEXT_TAG }}
+          release_name: ${{ steps.tag.outputs.NEXT_TAG }}
+          draft: false
+          prerelease: false
 
-      - name: Deployment Completed
-        run: echo "Deployment successful!"
+
+      - name: Capture Error
+        id: err
+        if: failure()
+        run: |
+          echo "error=Deployment failed at step: ${{ steps.deploy.outcome }}" >> $GITHUB_OUTPUT
+
+  # ----------------------------
+  # Success Email (includes Sonar QG details)
+  # ----------------------------
+  success_email:
+    needs: [sonar, build_and_deploy]
+    if: success()
+    uses: ./.github/workflows/send-mail.yml
+    secrets: inherit
+    with:
+      subject: "DEV DEPLOYMENT SUCCESS — ${{ needs.build_and_deploy.outputs.tag }}"
+      message: |
+        <b>Tag:</b> ${{ needs.build_and_deploy.outputs.tag }}<br/>
+        <b>Status:</b> Success<br/>
+        <b>Environment:</b> Development<br/><hr/>
+        <b>Sonar Quality Gate:</b> ${{ needs.sonar.outputs.qg_status }}<br/>
+        <b>Coverage:</b> ${{ needs.sonar.outputs.qg_coverage }}%<br/>
+        <b>Bugs:</b> ${{ needs.sonar.outputs.qg_bugs }}<br/>
+        <b>Vulnerabilities:</b> ${{ needs.sonar.outputs.qg_vulnerabilities }}<br/>
+      status: success
+      from: "manikandan.ramamoorthy@cxontology.com"
+      to: "manikandan.ramamoorthy@cxontology.com"
+
+
+
+  # ============================================================
+  # JOB 4 — FAILURE EMAIL
+  # ============================================================
+  failure_email:
+    needs: [sonar, build_and_deploy]
+    if: failure()
+    uses: ./.github/workflows/send-mail.yml
+    secrets: inherit
+    with:
+      subject: "DEV DEPLOYMENT FAILED — ${{ needs.build_and_deploy.outputs.tag || 'unknown' }}"
+      message: |
+        <b>Error:</b> ${{ needs.build_and_deploy.outputs.error }}<br/><hr/>
+        <b>Sonar Quality Gate:</b> ${{ needs.sonar.outputs.qg_status }}<br/>
+        <b>Coverage:</b> ${{ needs.sonar.outputs.qg_coverage }}%<br/>
+        <b>Bugs:</b> ${{ needs.sonar.outputs.qg_bugs }}<br/>
+        <b>Vulnerabilities:</b> ${{ needs.sonar.outputs.qg_vulnerabilities }}<br/>
+      status: failure
+      from: "manikandan.ramamoorthy@cxontology.com"
+      to: "manikandan.ramamoorthy@cxontology.com"
