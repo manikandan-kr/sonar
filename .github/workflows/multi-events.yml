@@ -1,7 +1,6 @@
 name: Multi Event Sample Workflow
 
 on:
-  # 1. Manual Trigger (UI button will show)
   workflow_dispatch:
     inputs:
       environment:
@@ -11,14 +10,12 @@ on:
         options:
           - qa
 
-  # 2. Schedule (every day at 5 AM UTC)
   schedule:
-    - cron: '0 5 * * *'
+    - cron: "0 5 * * *"
 
-  # 3. Push trigger (any branch, any file)
   push:
     branches:
-      - '**'
+      - "**"
 
 jobs:
   sample_job:
