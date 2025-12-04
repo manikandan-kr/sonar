@@ -1,0 +1,35 @@
+name: Multi Event Sample Workflow
+
+on:
+  # 1. Manual Trigger (UI button will show)
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Select environment"
+        required: true
+        type: choice
+        options:
+          - qa
+
+  # 2. Schedule (every day at 5 AM UTC)
+  schedule:
+    - cron: '0 5 * * *'
+
+  # 3. Push trigger (any branch, any file)
+  push:
+    branches:
+      - '**'
+
+jobs:
+  sample_job:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Print event type
+        run: echo "Workflow triggered by: ${{ github.event_name }}"
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Print complete
+        run: echo "Sample workflow completed."
