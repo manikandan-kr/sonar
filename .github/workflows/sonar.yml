@@ -323,8 +323,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ env.GIT_USERNAME }}
-          password: ${{ env.GIT_TOKEN }}
+          username: ${{ secrets.GIT_USERNAME }}
+          password: ${{ secrets.GIT_PAT }}
 
       - name: Create Auto-Increment Release Tag
         id: tag
