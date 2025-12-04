@@ -2,13 +2,6 @@ name: Multi Event Sample Workflow
 
 on:
   workflow_dispatch:
-    inputs:
-      environment:
-        description: "Select environment"
-        required: true
-        type: choice
-        options:
-          - qa
 
   schedule:
     - cron: "0 5 * * *"
@@ -22,11 +15,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Print event type
-        run: echo "Workflow triggered by: ${{ github.event_name }}"
+      - name: Show event
+        run: echo "Triggered by: ${{ github.event_name }}"
 
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Print complete
-        run: echo "Sample workflow completed."
+      - name: Done
+        run: echo "Workflow completed."
