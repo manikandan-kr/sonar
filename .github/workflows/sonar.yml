@@ -189,93 +189,93 @@ jobs:
       qg_bugs: ${{ steps.qg_check.outputs.qg_bugs }}
       qg_vulnerabilities: ${{ steps.qg_check.outputs.qg_vulnerabilities }}
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+    # steps:
+    #   - name: Checkout
+    #     uses: actions/checkout@v4
+    #     with:
+    #       fetch-depth: 0
 
-      - name: Install Dependencies (FastAPI + Tests + MAF Core)
-        run: |
-          python3 -m pip install --upgrade pip
+    #   - name: Install Dependencies (FastAPI + Tests + MAF Core)
+    #     run: |
+    #       python3 -m pip install --upgrade pip
           
-          # Install basic test tools
-          pip install fastapi uvicorn pytest coverage jq
+    #       # Install basic test tools
+    #       pip install fastapi uvicorn pytest coverage jq
 
-          # Install all requirements
-          if [ -f requirements.txt ]; then
-            pip install --no-cache-dir -r requirements.txt
-          else
-            echo "requirements.txt not found"
-          fi
+    #       # Install all requirements
+    #       if [ -f requirements.txt ]; then
+    #         pip install --no-cache-dir -r requirements.txt
+    #       else
+    #         echo "requirements.txt not found"
+    #       fi
 
-          # Install maf-core in editable mode (same as Docker)
-          if [ -d maf-core ]; then
-            echo "Installing maf-core editable package"
-            pip install --no-cache-dir -e maf-core
-          else
-            echo "maf-core folder not found"
-          fi
+    #       # Install maf-core in editable mode (same as Docker)
+    #       if [ -d maf-core ]; then
+    #         echo "Installing maf-core editable package"
+    #         pip install --no-cache-dir -e maf-core
+    #       else
+    #         echo "maf-core folder not found"
+    #       fi
 
 
-      - name: Run Tests & Coverage (Non-Blocking)
-        run: |
-          set -e || true
-          if [ -d prototype_tests ]; then
-            coverage erase || true
-            coverage run -m pytest prototype_tests || true
-            coverage xml -i || true
-          else
-            echo "No tests detected"
-          fi
+    #   - name: Run Tests & Coverage (Non-Blocking)
+    #     run: |
+    #       set -e || true
+    #       if [ -d prototype_tests ]; then
+    #         coverage erase || true
+    #         coverage run -m pytest prototype_tests || true
+    #         coverage xml -i || true
+    #       else
+    #         echo "No tests detected"
+    #       fi
 
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@v2
-        env:
-          SONAR_TOKEN:  ${{ secrets.SONAR_TOKEN }}
-          GITHUB_TOKEN: ${{ env.GIT_TOKEN }}
-        with:
-          projectBaseDir: .
+    #   - name: SonarCloud Scan
+    #     uses: SonarSource/sonarcloud-github-action@v2
+    #     env:
+    #       SONAR_TOKEN:  ${{ secrets.SONAR_TOKEN }}
+    #       GITHUB_TOKEN: ${{ env.GIT_TOKEN }}
+    #     with:
+    #       projectBaseDir: .
 
     
-      - name: Wait for Quality Gate Result
-        id: qg_check
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
-          set -e
+    #   - name: Wait for Quality Gate Result
+    #     id: qg_check
+    #     env:
+    #       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    #     run: |
+    #       set -e
 
-          PROJECT_KEY=manikandan-kr_sonar
-          AUTH="$SONAR_TOKEN:"
+    #       PROJECT_KEY=manikandan-kr_sonar
+    #       AUTH="$SONAR_TOKEN:"
 
-          ATTEMPTS=0
-          STATUS=""
+    #       ATTEMPTS=0
+    #       STATUS=""
 
-          while [ $ATTEMPTS -lt 12 ]; do
-            JSON=$(curl -s -u "$AUTH" \
-              "https://sonarcloud.io/api/qualitygates/project_status?projectKey=$PROJECT_KEY")
-            STATUS=$(echo "$JSON" | jq -r '.projectStatus.status // empty')
+    #       while [ $ATTEMPTS -lt 12 ]; do
+    #         JSON=$(curl -s -u "$AUTH" \
+    #           "https://sonarcloud.io/api/qualitygates/project_status?projectKey=$PROJECT_KEY")
+    #         STATUS=$(echo "$JSON" | jq -r '.projectStatus.status // empty')
 
-            if [ "$STATUS" != "" ] && [ "$STATUS" != "PENDING" ]; then
-              break
-            fi
+    #         if [ "$STATUS" != "" ] && [ "$STATUS" != "PENDING" ]; then
+    #           break
+    #         fi
 
-            ATTEMPTS=$((ATTEMPTS + 1))
-            sleep 10
-          done
+    #         ATTEMPTS=$((ATTEMPTS + 1))
+    #         sleep 10
+    #       done
 
-          echo "qg_status=$STATUS" >> $GITHUB_OUTPUT
+    #       echo "qg_status=$STATUS" >> $GITHUB_OUTPUT
 
-          METRICS=$(curl -s -u "$AUTH" \
-            "https://sonarcloud.io/api/measures/component?component=$PROJECT_KEY&metricKeys=coverage,bugs,vulnerabilities")
+    #       METRICS=$(curl -s -u "$AUTH" \
+    #         "https://sonarcloud.io/api/measures/component?component=$PROJECT_KEY&metricKeys=coverage,bugs,vulnerabilities")
 
-          COVERAGE=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="coverage") | .value // ""')
-          BUGS=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="bugs") | .value // ""')
-          VULN=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="vulnerabilities") | .value // ""')
+    #       COVERAGE=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="coverage") | .value // ""')
+    #       BUGS=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="bugs") | .value // ""')
+    #       VULN=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="vulnerabilities") | .value // ""')
 
-          echo "qg_coverage=$COVERAGE" >> $GITHUB_OUTPUT
-          echo "qg_bugs=$BUGS" >> $GITHUB_OUTPUT
-          echo "qg_vulnerabilities=$VULN" >> $GITHUB_OUTPUT
+    #       echo "qg_coverage=$COVERAGE" >> $GITHUB_OUTPUT
+    #       echo "qg_bugs=$BUGS" >> $GITHUB_OUTPUT
+    #       echo "qg_vulnerabilities=$VULN" >> $GITHUB_OUTPUT
 
   # ----------------------------
   # Job: Build, Tag, Release, Deploy

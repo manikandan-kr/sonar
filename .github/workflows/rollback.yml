@@ -162,10 +162,6 @@
 name: Rollback Deployment
 
 on:
-  push:
-    paths:
-      - '.github/workflows/rollback.yml'
-      
   workflow_dispatch:
     inputs:
       environment:
