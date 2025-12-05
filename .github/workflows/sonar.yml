@@ -189,11 +189,11 @@ jobs:
       qg_bugs: ${{ steps.qg_check.outputs.qg_bugs }}
       qg_vulnerabilities: ${{ steps.qg_check.outputs.qg_vulnerabilities }}
 
-    # steps:
-    #   - name: Checkout
-    #     uses: actions/checkout@v4
-    #     with:
-    #       fetch-depth: 0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
     #   - name: Install Dependencies (FastAPI + Tests + MAF Core)
     #     run: |
