@@ -49,4 +49,4 @@ jobs:
           resourceGroup: ${{ env.RESOURCE_GROUP }}
           containerAppEnvironment: ${{ env.ENVIRONMENT_NAME }}
           location: ${{ env.LOCATION }}
-          imageToBuild: ghcr.io/mcpdev/mcp-server:${{ github.sha }}
+          imageToBuild: ghcr.io/manikandan-kr/mcp-server:${{ github.sha }}
