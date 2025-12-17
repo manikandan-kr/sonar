@@ -1,0 +1,52 @@
+name: Build and Deploy a MCP DEV Container
+
+on:
+  push:
+    branches: [ mcp-dev ]
+
+env:
+  CONTAINER_APP_NAME: "dxc-mcp"
+  RESOURCE_GROUP: ${{ secrets.RESOURCE_GROUP }}
+  ENVIRONMENT_NAME: "dxc-mcp-env"
+  LOCATION: ${{ secrets.AZURE_LOCATION }}
+  GIT_TOKEN: ${{ secrets.GIT_PAT }}
+  GIT_USERNAME: ${{ secrets.GIT_USERNAME }}
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-and-deploy:
+    name: Build & Deploy Container App
+    runs-on: ubuntu-latest   
+
+    steps:                 
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ env.GIT_USERNAME }}
+          password: ${{ env.GIT_TOKEN }}
+
+      - name: Build & Deploy Container App
+        id: deploy
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          appSourcePath: ${{ github.workspace }}
+          registryUrl: ghcr.io
+          registryUsername: ${{ env.GIT_USERNAME }}
+          registryPassword: ${{ env.GIT_TOKEN }}
+          containerAppName: ${{ env.CONTAINER_APP_NAME }}
+          resourceGroup: ${{ env.RESOURCE_GROUP }}
+          containerAppEnvironment: ${{ env.ENVIRONMENT_NAME }}
+          location: ${{ env.LOCATION }}
+          imageToBuild: ghcr.io/mcpdev/mcp-server:${{ github.sha }}
