@@ -50,3 +50,5 @@ jobs:
           containerAppEnvironment: ${{ env.ENVIRONMENT_NAME }}
           location: ${{ env.LOCATION }}
           imageToBuild: ghcr.io/manikandan-kr/mcp-server:${{ github.sha }}
+          targetPort: 8080         
+          ingress: external
